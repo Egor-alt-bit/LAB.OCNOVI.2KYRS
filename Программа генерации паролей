@@ -1,0 +1,64 @@
+import sqlite3
+import hashlib
+import secrets
+import string
+
+def create_database():
+    conn = sqlite3.connect('passwords.db')
+    cursor = conn.cursor()
+    cursor.execute('''CREATE TABLE IF NOT EXISTS users
+                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                     username TEXT UNIQUE,
+                     password_hash TEXT,
+                     salt TEXT)''')
+    conn.commit()
+    conn.close()
+
+def generate_password(length=12):
+    characters = string.ascii_letters + string.digits + string.punctuation
+    return ''.join(secrets.choice(characters) for _ in range(length))
+
+def hash_password(password, salt=None):
+    if salt is None:
+        salt = secrets.token_hex(16)
+    salted_password = password + salt
+    return hashlib.sha256(salted_password.encode()).hexdigest(), salt
+
+def store_password(username, password):
+    password_hash, salt = hash_password(password)
+    conn = sqlite3.connect('passwords.db')
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO users (username, password_hash, salt) VALUES (?, ?, ?)",
+                  (username, password_hash, salt))
+    conn.commit()
+    conn.close()
+
+def verify_password(username, input_password):
+    conn = sqlite3.connect('passwords.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT password_hash, salt FROM users WHERE username=?", (username,))
+    result = cursor.fetchone()
+    conn.close()
+    
+    if not result:
+        return False
+    
+    stored_hash, salt = result
+    input_hash, _ = hash_password(input_password, salt)
+    return input_hash == stored_hash
+
+# Пример использования
+create_database()
+
+# Генерация и сохранение пароля
+username = "user1"
+password = generate_password()
+print(f"Generated password: {password}")
+store_password(username, password)
+
+# Проверка пароля
+input_pass = input("Enter password to verify: ")
+if verify_password(username, input_pass):
+    print("Password correct!")
+else:
+    print("Password incorrect!")
